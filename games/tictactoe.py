@@ -167,7 +167,7 @@ class TicTacToeGUI:
             self.root, 
             text="Your turn (X)", 
             font=self.status_font,
-            bg="#f0f0f0"
+            bg="#b73e3e"
         )
         self.status_label.pack(pady=10)
         

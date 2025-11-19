@@ -1,3 +1,5 @@
+import copy
+
 class Node:
     """
     A data structure that keeps track of:
@@ -15,7 +17,6 @@ class Node:
         self.is_leaf_node = False 
         self.heur_val = None
 
-
     def expand(self, list_actions: callable, take_action: callable) -> set:
         """
         Expands the node, i.e returns a set of all possible
@@ -25,15 +26,49 @@ class Node:
         nodes = set({})
         for action in possible_actions:
             new_state, step_cost = take_action(self.state, action)
-            new_node = Node(new_state, self, action, self.cost + step_cost)
-            nodes.add(new_node)
+            # Ensure valid state before creating node
+            if new_state is not None:
+                new_node = Node(new_state, self, action, self.cost + step_cost)
+                nodes.add(new_node)
         if not nodes:
             self.is_leaf_node = True
         return nodes
     
     def check_goal_state(self, goal_checker: callable):
         return goal_checker(self.state)
-        
+
+    # ==================================================
+    # UNIVERSAL HASHING
+    # ==================================================
+    @staticmethod
+    def _make_hashable(value):
+        """
+        Helper function: Recursively converts lists/dicts into immutable
+        types (tuples) so they can be hashed.
+        """
+        if isinstance(value, list):
+            return tuple(Node._make_hashable(x) for x in value)
+        elif isinstance(value, tuple):
+            return tuple(Node._make_hashable(x) for x in value)
+        elif isinstance(value, set):
+            return tuple(sorted(Node._make_hashable(x) for x in value))
+        elif isinstance(value, dict):
+            return tuple(sorted((k, Node._make_hashable(v)) for k, v in value.items()))
+        else:
+            return value
+
+    def __eq__(self, other):
+        """Checks if two nodes represent the same state."""
+        return self.state == other.state
+
+    def __hash__(self):
+        """
+        Hashes the state regardless of the state.
+        """
+        return hash(self._make_hashable(self.state))
+    
+    def __repr__(self):
+        return str(self.state)
 
 
 class Frontier:
@@ -46,7 +81,7 @@ class Frontier:
         "Please provide an iterable of nodes."
         self.nodes = list(nodes)  # Using a list to maintain order
         self.history = set()  # Set for efficient lookup in history
-           
+            
     def remove(self, node):
         if node in self.nodes:
             self.nodes.remove(node)
@@ -55,7 +90,7 @@ class Frontier:
     def extend(self, nodes):
         # Add only nodes that aren't already in the frontier
         for node in nodes:
-            if node not in self.nodes:
+            if node not in self.nodes and node not in self.history:
                 self.nodes.append(node)
     
     def fifo(self):
@@ -97,7 +132,6 @@ class Frontier:
 
     def __len__(self):
         return len(self.nodes)
-
 
 
 class Search:
@@ -152,18 +186,24 @@ class Search:
     def search(self):
         current_node = self.start
         while self.frontier and not current_node.check_goal_state(self.goal_checker):
-            current_node = self.sample_mapping.get(self.algo, lambda: None)() # sample node based on algo
+            current_node = self.sample_mapping.get(self.algo, lambda: None)()
+            
+            if current_node is None: # Safety check
+                break
+
             if current_node in self.frontier.history:
+                self.frontier.remove(current_node)
                 continue
+            
             new_nodes = current_node.expand(self.list_actions, self.take_action)
             self.frontier.remove(current_node)
             self.frontier.extend(new_nodes)
 
-        if current_node.check_goal_state(self.goal_checker):
+        if current_node and current_node.check_goal_state(self.goal_checker):
             path = [current_node]
             total_cost = current_node.cost
             while current_node.parent:
                 current_node = current_node.parent
                 path.append(current_node)
             return reversed(path), total_cost
-        return None 
+        return None
